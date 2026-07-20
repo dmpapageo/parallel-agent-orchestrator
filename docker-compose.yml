@@ -1,0 +1,50 @@
+# Network boundary, identical in shape to the single-agent project.
+#
+# Two networks:
+#   internal_net  -> internal: true  => NO route to the internet at all.
+#   egress_net    -> normal bridge   => can reach the internet.
+#
+# The orchestrator sits ONLY on internal_net, so it physically cannot reach any
+# host except containers on that network. Its only outbound path is the proxy,
+# and the proxy only forwards to api.anthropic.com.
+#
+# Sub-agents run as child PROCESSES inside the orchestrator container, so they
+# inherit this exact boundary — parallelism does not add a single new egress
+# path. See "Why processes, not containers" in the Stage 1 report.
+
+services:
+  proxy:
+    image: ubuntu/squid:latest
+    volumes:
+      - ./proxy/squid.conf:/etc/squid/squid.conf:ro
+    networks:
+      - internal_net   # reachable by the orchestrator
+      - egress_net     # can reach the internet, to proxy through to Anthropic
+    # Report healthy only once squid is listening, so the orchestrator waits for
+    # a ready proxy instead of racing ahead into an unresolvable "proxy" name.
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/3128"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 2s
+
+  orchestrator:
+    build: .
+    depends_on:
+      proxy:
+        condition: service_healthy
+    environment:
+      # Passed through from YOUR shell — never baked into the image.
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # Force all outbound HTTP(S) through the allowlist proxy. Child processes
+      # inherit these, so every sub-agent is proxied too.
+      - HTTPS_PROXY=http://proxy:3128
+      - HTTP_PROXY=http://proxy:3128
+    networks:
+      - internal_net   # ONLY this network -> no direct internet access
+
+networks:
+  internal_net:
+    internal: true
+  egress_net: {}

@@ -1,0 +1,8 @@
+# Keep the build context (and image) clean.
+**/__pycache__/
+**/.pytest_cache/
+*.pyc
+.git/
+.venv/
+venv/
+README.md

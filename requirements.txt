@@ -1,0 +1,7 @@
+# Verify step: run the target test suite (whole suite, or one module at a time).
+pytest==8.3.4
+
+# The "brain" for the orchestrator and its sub-agents: the Anthropic Messages
+# API client. We call it directly and write the loops ourselves — same as the
+# single-agent project. That's the learning goal.
+anthropic

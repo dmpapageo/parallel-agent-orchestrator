@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+# sub-agents run pytest with cwd set to their own module, so a local run drops
+# one of these into each target_repo/<module>/ directory
+.pytest_cache/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Secrets / local env
+# (this project passes ANTHROPIC_API_KEY via shell env at runtime, never a file)
+.env
+.env.*
+*.key
+*.pem
+
+# OS
+.DS_Store
