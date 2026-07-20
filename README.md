@@ -9,7 +9,7 @@ as much as the slowest agent rather than the sum of all of them.
 
 This is a learning project built in stages. It is deliberately small and readable
 rather than general purpose. It builds on a single code fixing agent
-([code-fixer-agent](../code-fixer-agent)) and adds the one thing that project did not
+([code-fixer-agent](https://github.com/dmpapageo/code-fixer-agent)) and adds the one thing that project did not
 have: coordination.
 
 ## What it does
