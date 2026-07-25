@@ -4,8 +4,8 @@ A minimal multi-agent orchestrator: one coordinator splits a repository of faili
 tests across several sub-agents that fix their assigned module **at the same time**,
 in separate processes, inside a sandboxed container.
 
-Measured on this repo: **about 20 seconds instead of about 60**, because the run costs
-as much as the slowest agent rather than the sum of all of them.
+Measured on this repo: **about 20 seconds instead of about 60** (end to end), because the
+run costs as much as the slowest agent rather than the sum of all of them.
 
 This is a learning project built in stages. It is deliberately small and readable
 rather than general purpose. It builds on a single code fixing agent
