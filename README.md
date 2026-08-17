@@ -154,8 +154,27 @@ flowchart LR
 - **The API key is never baked into the image.** It is read from your shell at run time
   and inherited by child processes. The orchestrator never reads or logs it.
 
-Verified by running these inside the container: `example.com` is refused by the proxy,
-`api.anthropic.com` is reachable and returns 401 without credentials.
+### How the containment is verified
+
+`tests/test_containment.py` (runs on every push via GitHub Actions, no API key or Docker
+needed) checks the guards and the committed config directly:
+
+- path allowlist: `..` traversal, absolute paths, and symlinks pointing out of the module
+  are all rejected, and a rejected `write_file` writes nothing;
+- the tool surface is exactly `read_file` / `write_file` / `run_tests`;
+- `run_tests` in one module never sees a failing test in a sibling module;
+- the iteration cap fires at the configured turn, and with `AGENT_MAX_ITERATIONS=0` a
+  real sub-agent process stops before it ever calls the API;
+- `squid.conf` allowlists exactly `api.anthropic.com` on 443 with `deny all` last, the
+  orchestrator sits only on the `internal: true` network, and the image runs as a
+  non-root user with `agent/` and `orchestrator/` root owned.
+
+The live network check is still manual, because it needs the containers up: from inside
+the orchestrator container, `example.com` is refused by the proxy and `api.anthropic.com`
+is reachable and returns 401 without credentials.
+
+Each sub-agent also reports its token usage (turns, input and output tokens) at exit,
+and the summary totals them across agents, so a run's cost is visible next to its speedup.
 
 ## Results
 

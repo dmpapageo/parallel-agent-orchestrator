@@ -68,17 +68,33 @@ def summary(assignments, wall_elapsed):
 
     for assignment in assignments:
         verdict = "GREEN" if assignment.went_green else "NOT FIXED"
+        tokens = ""
+        if assignment.usage:
+            u = assignment.usage
+            tokens = (
+                f"  turns={u['turns']} "
+                f"in={u['input_tokens']:,} out={u['output_tokens']:,}"
+            )
         print(
             f"  {assignment.module:<12} {verdict:<10} "
-            f"pid={assignment.pid:<7} exit={assignment.returncode}",
+            f"pid={assignment.pid:<7} exit={assignment.returncode}{tokens}",
             flush=True,
         )
 
     fixed = sum(1 for a in assignments if a.went_green)
     total = len(assignments)
     sum_of_runtimes = sum(a.finished_at for a in assignments)
+    reported = [a.usage for a in assignments if a.usage]
+    total_in = sum(u["input_tokens"] for u in reported)
+    total_out = sum(u["output_tokens"] for u in reported)
 
     print(f"\n  modules fixed     : {fixed}/{total}", flush=True)
+    if reported:
+        print(
+            f"  tokens            : {total_in:,} input + {total_out:,} output "
+            f"across {len(reported)} agents",
+            flush=True,
+        )
     print(f"  wall clock        : {wall_elapsed:5.1f}s", flush=True)
     print(
         f"  sum of runtimes   : {sum_of_runtimes:5.1f}s "

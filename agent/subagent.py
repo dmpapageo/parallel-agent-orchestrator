@@ -17,6 +17,7 @@ Exit code: 0 if the module went green, 1 otherwise (the orchestrator reads this)
 """
 
 import argparse
+import json
 import os
 import sys
 
@@ -31,6 +32,18 @@ MODEL = os.environ.get("AGENT_MODEL", "claude-opus-4-8")
 MAX_TOKENS = 16000
 # The iteration-cap guard. Lower it (AGENT_MAX_ITERATIONS) to see the cap fire fast.
 MAX_ITERATIONS = int(os.environ.get("AGENT_MAX_ITERATIONS", "10"))
+# When set (the orchestrator sets it), token usage is written to
+# <AGENT_USAGE_DIR>/<module>.json on exit. Only the sub-agent writes that file,
+# so it is another channel back to the parent that cannot collide with anyone.
+USAGE_DIR = os.environ.get("AGENT_USAGE_DIR")
+
+
+def _write_usage(module: str, usage: dict):
+    if not USAGE_DIR:
+        return
+    os.makedirs(USAGE_DIR, exist_ok=True)
+    with open(os.path.join(USAGE_DIR, f"{module}.json"), "w", encoding="utf-8") as handle:
+        json.dump(usage, handle)
 
 SYSTEM_PROMPT = """You are a coding agent whose one job is to make a failing \
 pytest suite pass in a single small Python module.
@@ -124,7 +137,19 @@ def run(module: str) -> bool:
     iteration_guard = guards.IterationGuard(MAX_ITERATIONS)  # GUARD 1: iteration cap
 
     messages = [{"role": "user", "content": _initial_task(scope)}]
+    usage = {"turns": 0, "input_tokens": 0, "output_tokens": 0}
 
+    try:
+        return _loop(scope, client, iteration_guard, messages, usage, out)
+    finally:
+        out.say(
+            f"usage: {usage['turns']} turns, "
+            f"{usage['input_tokens']} input tokens, {usage['output_tokens']} output tokens"
+        )
+        _write_usage(module, usage)
+
+
+def _loop(scope, client, iteration_guard, messages, usage, out) -> bool:
     while True:
         # GUARD 1 checkpoint: bail out if the agent has taken too many turns.
         try:
@@ -144,6 +169,9 @@ def run(module: str) -> bool:
             tools=tools.TOOLS,
             messages=messages,
         )
+        usage["turns"] = turn
+        usage["input_tokens"] += response.usage.input_tokens
+        usage["output_tokens"] += response.usage.output_tokens
 
         # Show any text the model wrote (its plan / conclusions).
         for block in response.content:

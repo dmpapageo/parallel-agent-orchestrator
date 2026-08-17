@@ -15,6 +15,7 @@ Run it (inside the container) with:  python -m orchestrator.run
 """
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -39,6 +40,7 @@ class Assignment:
     pid: int | None = None            # OS pid, proof these are separate processes
     finished_at: float | None = None  # seconds from batch start to this agent's exit
     log_path: str | None = None       # captured transcript, when not streaming
+    usage: dict | None = None         # turns / input_tokens / output_tokens, if reported
 
     @property
     def went_green(self) -> bool:
@@ -151,6 +153,17 @@ def run_assignments(assignments: list[Assignment], log_dir: str | None) -> list[
     return assignments
 
 
+def collect_usage(assignments: list[Assignment], usage_dir: str):
+    """Read each sub-agent's usage file, if it left one. Missing is fine."""
+    for assignment in assignments:
+        path = os.path.join(usage_dir, f"{assignment.module}.json")
+        try:
+            with open(path, encoding="utf-8") as handle:
+                assignment.usage = json.load(handle)
+        except (OSError, ValueError):
+            assignment.usage = None
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description="Fix every failing module by assigning one sub-agent to each."
@@ -188,11 +201,14 @@ def main(argv=None) -> int:
 
     # 3) RUN, concurrently.
     log_dir = None if args.stream else tempfile.mkdtemp(prefix="subagent-logs-")
+    usage_dir = tempfile.mkdtemp(prefix="subagent-usage-")
+    os.environ["AGENT_USAGE_DIR"] = usage_dir  # inherited by every sub-agent
     wall_start = time.monotonic()
     run_assignments(assignments, log_dir)
     wall_elapsed = time.monotonic() - wall_start
 
     # 4) COLLECT and present.
+    collect_usage(assignments, usage_dir)
     report.timeline(assignments)
     report.summary(assignments, wall_elapsed)
 
