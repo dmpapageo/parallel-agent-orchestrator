@@ -27,8 +27,8 @@ from . import guards, tools
 
 
 # --- Configuration -----------------------------------------------------------
-# Default model is claude-opus-4-8 (override with AGENT_MODEL for a cheaper run).
-MODEL = os.environ.get("AGENT_MODEL", "claude-opus-4-8")
+# Default model is claude-opus-5 (override with AGENT_MODEL for a cheaper run).
+MODEL = os.environ.get("AGENT_MODEL", "claude-opus-5")
 MAX_TOKENS = 16000
 # The iteration-cap guard. Lower it (AGENT_MAX_ITERATIONS) to see the cap fire fast.
 MAX_ITERATIONS = int(os.environ.get("AGENT_MAX_ITERATIONS", "10"))

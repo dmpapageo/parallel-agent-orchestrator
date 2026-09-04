@@ -269,7 +269,7 @@ docker compose down
 Each `docker compose run` starts a fresh container, so fixes do not persist between
 commands. Chain them with `bash -c` to see the result of a fix.
 
-Environment overrides: `AGENT_MODEL` (default `claude-opus-4-8`) and
+Environment overrides: `AGENT_MODEL` (default `claude-opus-5`) and
 `AGENT_MAX_ITERATIONS` (default 10, lower it to watch the iteration cap fire).
 
 ## Honest limitations
