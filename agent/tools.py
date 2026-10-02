@@ -1,9 +1,12 @@
-"""Tools — a sub-agent's entire set of actions on the world.
+"""Tools: a sub-agent's entire set of actions on the world.
 
 The model can do exactly three things: read a file, write a file, and run the
-tests. Nothing else. There is no shell tool, no network tool, no "run arbitrary
-code" tool. Reads and writes are confined to the sub-agent's OWN module by the
-ModuleScope guard, and run_tests only ever runs that module's tests.
+tests. Nothing else. There is no shell tool and no network tool. Reads and
+writes are confined to the sub-agent's OWN module by the ModuleScope guard, and
+run_tests only ever runs that module's tests. Note that pytest executes the
+module's Python files, which the agent can rewrite, so code the agent writes
+does run. That code is NOT path guarded: it runs with the process user's file
+permissions (in the container, the `agent` user, which owns all of target_repo/).
 
 `TOOLS` is the schema the model sees. `dispatch()` is how the loop actually
 executes a tool the model asked for.

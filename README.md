@@ -4,8 +4,10 @@ A minimal multi-agent orchestrator: one coordinator splits a repository of faili
 tests across several sub-agents that fix their assigned module **at the same time**,
 in separate processes, inside a sandboxed container.
 
-Measured on this repo: **about 20 seconds instead of about 60** (end to end), because the
-run costs as much as the slowest agent rather than the sum of all of them.
+Measured once on this repo (July 2026, with `claude-opus-4-8`): **about 20 seconds
+instead of about 60** (end to end), because the run costs as much as the slowest agent
+rather than the sum of all of them. See [Results](#results) for what that single run
+does and does not show.
 
 This is a learning project built in stages. It is deliberately small and readable
 rather than general purpose. It builds on a single code fixing agent
@@ -60,8 +62,12 @@ flowchart LR
     D -->|turn cap hit| F[exit 1]
 ```
 
-Three tools only: `read_file`, `write_file`, `run_tests`. No shell, no network tool, no
-arbitrary code execution.
+Three tools only: `read_file`, `write_file`, `run_tests`. No shell tool and no network
+tool. `read_file` and `write_file` are confined to the agent's own module by a path
+guard. `run_tests` takes no arguments and runs pytest in that module, but pytest
+executes the module's Python files, which the agent can rewrite. So an agent can run
+code it wrote, and that code is not path guarded: it runs as the container user, which
+can write anywhere in `target_repo/` (see [Containment](#containment)).
 
 ```
 agent/
@@ -86,7 +92,7 @@ shared state, no shared config, no shared file. Every module and test filename i
 unique. Each module's tests are meaningful on their own, so an agent can verify its own
 fix without waiting for anybody else.
 
-**2. The write scopes are disjoint, and enforced.** Each sub-agent is constructed with a
+**2. The write scopes are disjoint, and enforced for file tools.** Each sub-agent is constructed with a
 `ModuleScope` rooted at exactly one directory. Every path it asks for is joined onto that
 root, fully resolved (following `..` and symlinks), and rejected if the result lands
 outside. That makes the containment structural rather than a blacklist:
@@ -97,8 +103,13 @@ outside. That makes the containment structural rather than a blacklist:
 a symlink pointing away     ->  resolve() follows it, the real target is checked
 ```
 
-Two agents writing at the same instant cannot touch the same file, because the guard
-will not let them.
+Two agents using `write_file` at the same instant cannot touch the same file, because
+the guard will not let them. The guard covers the file tools only. Code that runs under
+`run_tests` (a test file or `conftest.py` the agent wrote, for example) is limited by
+file permissions instead, and those let it write to any module in `target_repo/`. Nothing
+in the code stops an agent from doing that. The system prompt asks each agent to make
+the smallest fix to its own module's code and not to edit test files, but no guard
+enforces either request.
 
 **3. The sub-agents are ignorant of each other.** A sub-agent knows only its own module.
 It has no concept of the orchestrator, of other modules, or of other agents. There is no
@@ -146,9 +157,11 @@ flowchart LR
   `internal: true`. Even if it ignored the proxy settings, it has nowhere to go.
 - **Allowlist proxy.** Squid permits CONNECT to `api.anthropic.com:443` and denies
   everything else.
-- **Non-root.** Everything runs as an unprivileged user. Only `target_repo/` is writable.
-  The `agent/` and `orchestrator/` code is root owned, so an agent cannot edit its own
-  loop or its own guards.
+- **Non-root.** Everything runs as an unprivileged user, `agent`. Of the copied code,
+  only `target_repo/` is owned by that user, so it is writable by every sub-agent and by
+  any code a sub-agent runs through `run_tests` (as are the usual scratch places such as
+  `/tmp` and the user's home). The `agent/` and `orchestrator/` code is root owned, so
+  an agent cannot edit its own loop or its own guards.
 - **Iteration cap.** Each sub-agent halts after a fixed number of turns, so a stuck agent
   cannot loop forever.
 - **The API key is never baked into the image.** It is read from your shell at run time
@@ -156,41 +169,52 @@ flowchart LR
 
 ### How the containment is verified
 
-`tests/test_containment.py` (runs on every push via GitHub Actions, no API key or Docker
-needed) checks the guards and the committed config directly:
+`tests/test_containment.py` holds 37 tests and runs on every push via GitHub Actions,
+with no API key or Docker needed. They split into three kinds:
 
-- path allowlist: `..` traversal, absolute paths, and symlinks pointing out of the module
-  are all rejected, and a rejected `write_file` writes nothing;
-- the tool surface is exactly `read_file` / `write_file` / `run_tests`;
-- `run_tests` in one module never sees a failing test in a sibling module;
-- the iteration cap fires at the configured turn, and with `AGENT_MAX_ITERATIONS=0` a
-  real sub-agent process stops before it ever calls the API;
-- `squid.conf` allowlists exactly `api.anthropic.com` on 443 with `deny all` last, the
-  orchestrator sits only on the `internal: true` network, and the image runs as a
-  non-root user with `agent/` and `orchestrator/` root owned.
+- **29 run the guard and tool code** against a throwaway directory tree, or as a real
+  sub-agent subprocess:
+  - path allowlist: `..` traversal, absolute paths, and symlinks pointing out of the
+    module are all rejected, and a rejected `write_file` writes nothing;
+  - `run_tests` in one module never sees a failing test in a sibling module;
+  - the iteration cap fires at the configured turn, and with `AGENT_MAX_ITERATIONS=0` a
+    real sub-agent process stops before it ever calls the API.
+- **4 check the pass rule**: only pytest exit code 0 counts as green.
+- **4 are static checks** that read code or config as text, without running anything:
+  - the tool list is exactly `read_file` / `write_file` / `run_tests`;
+  - `squid.conf` allowlists exactly `api.anthropic.com` on 443 with `deny all` last, the
+    orchestrator sits only on the `internal: true` network, and the Dockerfile switches
+    to a non-root user and leaves `agent/` and `orchestrator/` root owned.
 
-The live network check is still manual, because it needs the containers up: from inside
-the orchestrator container, `example.com` is refused by the proxy and `api.anthropic.com`
-is reachable and returns 401 without credentials.
+No test starts the containers, so the network boundary and the non-root user are
+verified only as committed config, not at runtime. No test runs agent-written code
+through `run_tests` to probe the gap described above. The live network check is
+manual: from inside the orchestrator container, `example.com` is refused by the proxy
+and `api.anthropic.com` is reachable and returns 401 without credentials.
 
 Each sub-agent also reports its token usage (turns, input and output tokens) at exit,
-and the summary totals them across agents, so a run's cost is visible next to its speedup.
+and the summary totals the tokens across agents, so a run's token usage is visible next
+to its speedup. Tokens only: no dollar cost is calculated.
 
 ## Results
 
-Measured on this repo, all four modules fixed, full suite green at 23 passed:
+One run on this repo, in July 2026, with the sub-agents on `claude-opus-4-8` (the
+default model at the time). All four modules fixed, full suite green at 23 passed. The
+current default is `claude-opus-5`, a different model, and these figures have not been
+re-measured on it, so expect different times.
 
 | | Sequential | Parallel |
 | --- | --- | --- |
 | End to end (`time docker compose run ...`) | about 60s | about 20s |
-| Agent phase (wall clock) | 47.4s of work | 13.0s |
+| Agent phase (wall clock) | 47.4s of work (sum of the parallel run's agent times, an estimate) | 13.0s |
 | Slowest single agent | n/a | 13.0s |
 
 There are two speedup numbers, and they measure different things. Both are worth
 stating:
 
-- **About 3.6x**, sum of agent runtimes divided by wall clock (47.4s / 13.0s). This is
-  what the summary prints, and it is the honest measure of the parallel phase itself.
+- **About 3.6x** in that one run, sum of agent runtimes divided by wall clock
+  (47.4s / 13.0s). This is what the summary prints, and it is the honest measure of the
+  parallel phase itself.
 - **About 3x**, end to end, roughly 60s down to roughly 20s. This is what a stopwatch
   shows, because it also includes container startup and the discovery pass, which are
   sequential no matter how many agents you run.
@@ -198,7 +222,9 @@ stating:
 The first number is the one to quote about the orchestration. The second is the one a
 user actually experiences.
 
-Real output from a run. Exact per-agent times vary between runs, since LLM latency does:
+Real output from that July 2026 run. It predates per-agent token reporting, so the
+current summary also prints turns and token counts. Exact per-agent times vary between
+runs, since LLM latency does:
 
 ```
 ==================== TIMELINE ====================
@@ -269,7 +295,8 @@ docker compose down
 Each `docker compose run` starts a fresh container, so fixes do not persist between
 commands. Chain them with `bash -c` to see the result of a fix.
 
-Environment overrides: `AGENT_MODEL` (default `claude-opus-5`) and
+Environment overrides: `AGENT_MODEL` (default `claude-opus-5`; the timings in
+[Results](#results) were measured on `claude-opus-4-8`) and
 `AGENT_MAX_ITERATIONS` (default 10, lower it to watch the iteration cap fire).
 
 ## Honest limitations
@@ -283,4 +310,5 @@ Environment overrides: `AGENT_MODEL` (default `claude-opus-5`) and
 - **No retry across agents.** If one agent fails, the others still succeed and the run
   reports a partial result. It does not reassign the failure.
 - **The sequential comparison is approximate.** The 60s baseline and the 20s parallel run
-  were single measurements on one machine, with LLM latency varying between runs.
+  were single measurements on one machine in July 2026, with `claude-opus-4-8`, and LLM
+  latency varies between runs. They have not been repeated on the current default model.

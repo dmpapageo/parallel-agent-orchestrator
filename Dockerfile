@@ -11,11 +11,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # The target repo the sub-agents will fix. COPIED IN (not bind-mounted) so the
 # container is self-contained and agents can only touch their own copy.
-# --chown gives the non-root user WRITE access to target_repo/ only.
+# --chown gives the non-root user WRITE access to target_repo/ (all of it), and
+# not to agent/ or orchestrator/.
 #
 # Each module lives in its own subdirectory. That layout is the whole basis for
-# parallelism: one sub-agent is scoped to one subdirectory, so two agents
-# writing at the same time can never touch the same file.
+# parallelism: one sub-agent's file tools are scoped to one subdirectory, so two
+# agents using write_file at the same time can never touch the same file.
 COPY --chown=agent:agent target_repo/ ./target_repo/
 
 # The sub-agent (loop + tools + guards). Deliberately NOT chowned: it stays

@@ -100,9 +100,12 @@ def run_assignments(assignments: list[Assignment], log_dir: str | None) -> list[
     These are separate OS PROCESSES, not threads, so there is no shared memory
     to corrupt in the first place. Beyond that:
 
-      - Each sub-agent writes only inside its own module directory, enforced by
-        ModuleScope. The writable sets are disjoint, so concurrent edits cannot
-        collide. This is the payoff for making the modules independent.
+      - Each sub-agent's write_file calls land only inside its own module
+        directory, enforced by ModuleScope. Those writable sets are disjoint,
+        so concurrent write_file edits cannot collide. This is the payoff for
+        making the modules independent. (Code an agent runs through run_tests
+        is not path guarded; it can write anywhere the `agent` user can,
+        which includes every module in target_repo/.)
       - Each runs pytest with cwd set to its own module, so even the
         .pytest_cache directories are separate. No file is written by two agents.
       - A child's only channel back to the parent is its exit code, which the OS

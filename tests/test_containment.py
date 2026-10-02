@@ -85,7 +85,7 @@ def test_symlink_pointing_outside_is_followed_and_rejected(fake_repo):
         scope.resolve("sneaky.py")
 
 
-# --- The tools honour the scope, and the escape never happens ------------------
+# --- The tools honor the scope, and the escape never happens ------------------
 
 def test_write_outside_module_is_error_and_writes_nothing(fake_repo):
     scope = guards.ModuleScope("alpha")

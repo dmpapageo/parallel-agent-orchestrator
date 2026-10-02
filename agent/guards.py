@@ -1,4 +1,4 @@
-"""Guardrails — a sub-agent's safety boundaries.
+"""Guardrails: a sub-agent's safety boundaries.
 
 Guards are deliberately separate from the tools and the loop: the tools ask the
 guards for permission, and the loop asks the guards when to stop. Every safety
@@ -6,8 +6,8 @@ decision lives here, in one place you can read top to bottom.
 
 The one difference from the single-agent version is ModuleScope. There, the
 agent's world was the whole target repo. Here, each sub-agent's world is ONE
-module directory inside it — which is what lets several agents run at once
-without being able to touch each other's work.
+module directory inside it, which is what lets several agents run at once
+without their file tools being able to touch each other's work.
 """
 
 import os

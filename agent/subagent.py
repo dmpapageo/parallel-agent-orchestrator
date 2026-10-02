@@ -118,7 +118,7 @@ def run(module: str) -> bool:
     scope = guards.ModuleScope(module)
 
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        sys.exit("ANTHROPIC_API_KEY is not set — pass it into the container.")
+        sys.exit("ANTHROPIC_API_KEY is not set. Pass it into the container.")
 
     out = Printer(module)
     out.say(f"pid={os.getpid()} scope={scope.root}")
@@ -213,7 +213,7 @@ def _loop(scope, client, iteration_guard, messages, usage, out) -> bool:
         messages.append({"role": "user", "content": tool_results})
 
         if went_green:
-            out.rule("SUCCESS — module tests pass")
+            out.rule("SUCCESS: module tests pass")
             return True
 
 
